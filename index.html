@@ -4,16 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Control Calórico</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/415/415733.png">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root { --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --accent: #38bdf8; --highlight: #fbbf24; }
-        body { font-family: 'Segoe UI', sans-serif; padding: 15px; background-color: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; }
-        .card { background: var(--card); padding: 20px; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.4); margin-bottom: 20px; width: 100%; max-width: 400px; text-align: center; }
+        body { font-family: sans-serif; padding: 15px; background-color: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; }
+        .card { background: var(--card); padding: 20px; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 20px; width: 100%; max-width: 400px; text-align: center; box-sizing: border-box; }
         .title-main { font-size: 1.2rem; font-weight: 800; color: var(--accent); margin-bottom: 15px; text-transform: uppercase; }
         label { display: block; font-weight: 600; margin: 10px 0 5px; color: #94a3b8; font-size: 0.7rem; text-transform: uppercase; }
-        input { width: 100%; padding: 12px; background: #334155; border: 1px solid #475569; color: white; border-radius: 8px; text-align: center; font-size: 1rem; }
+        input { width: 100%; padding: 12px; background: #334155; border: 1px solid #475569; color: white; border-radius: 8px; text-align: center; font-size: 1rem; box-sizing: border-box; }
         .big-stat { font-size: 1.8rem; font-weight: 700; color: var(--highlight); margin: 15px 0; }
-        .nav-btn { background: #334155; border: none; color: var(--accent); padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        .nav-btn { background: #334155; border: none; color: var(--accent); padding: 10px 20px; border-radius: 8px; cursor: pointer; }
         .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; max-width: 400px; }
         button.action { padding: 12px; background: var(--accent); color: #0f172a; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; }
     </style>
@@ -23,7 +25,7 @@
     <div class="card">
         <div class="title-main">CONTROL DE CALORIAS</div>
         <label>Calorías diarias objetivo</label>
-        <input type="number" id="objetivoDiario" onchange="guardarConfig()">
+        <input type="number" id="objetivoDiario" oninput="guardarConfig()">
     </div>
 
     <div class="card">
@@ -56,12 +58,17 @@
         <input type="file" id="fileInput" style="display:none" onchange="importarDatos(event)">
     </div>
 
-    <div style="text-align: center; font-size: 0.7rem; color: #64748b; margin-top: 20px;">CREADO POR DAVID LECHUGA</div>
-
     <script>
         let db = JSON.parse(localStorage.getItem('calAppDB')) || { objetivo: 2000, registros: {} };
         let offsetSemana = 0;
         let chart;
+
+        // Forzar inicialización al cargar la página
+        window.onload = () => {
+            document.getElementById('objetivoDiario').value = db.objetivo;
+            document.getElementById('fechaSeleccionada').valueAsDate = new Date();
+            cargarDatos();
+        };
 
         function guardarConfig() {
             db.objetivo = parseInt(document.getElementById('objetivoDiario').value) || 2000;
@@ -79,8 +86,13 @@
             const restante = db.objetivo - neto;
             document.getElementById('resultado').innerText = `${neto} kcal`;
             document.getElementById('detalle').innerText = restante >= 0 ? `Restan: ${restante} kcal` : `Exceso: ${Math.abs(restante)} kcal`;
+            
             const fecha = document.getElementById('fechaSeleccionada').value;
-            if(fecha) { db.registros[fecha] = {d, a, c, o, g}; localStorage.setItem('calAppDB', JSON.stringify(db)); actualizarGrafica(); }
+            if(fecha) {
+                db.registros[fecha] = {d, a, c, o, g};
+                localStorage.setItem('calAppDB', JSON.stringify(db));
+                actualizarGrafica();
+            }
         }
 
         function cambiarSemana(dir) { offsetSemana += dir; actualizarGrafica(); }
@@ -89,6 +101,8 @@
             const hoy = new Date();
             const inicioSemana = new Date(hoy);
             inicioSemana.setDate(hoy.getDate() - (hoy.getDay() === 0 ? 6 : hoy.getDay() - 1) + (offsetSemana * 7));
+            const finSemana = new Date(inicioSemana); finSemana.setDate(inicioSemana.getDate() + 6);
+            
             const labels = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
             const data = [];
             for(let i=0; i<7; i++) {
@@ -96,7 +110,9 @@
                 const r = db.registros[d.toISOString().split('T')[0]] || {d:0, a:0, c:0, o:0, g:0};
                 data.push((r.d + r.a + r.c + r.o) - r.g);
             }
-            document.getElementById('tituloGrafica').innerText = "Semana Calórica";
+
+            document.getElementById('tituloGrafica').innerText = `${inicioSemana.toLocaleDateString()} al ${finSemana.toLocaleDateString()}`;
+            
             if(chart) chart.destroy();
             chart = new Chart(document.getElementById('graficaSemanal').getContext('2d'), {
                 type: 'bar',
@@ -104,9 +120,10 @@
                     labels, 
                     datasets: [
                         { label: 'Kcal', data, backgroundColor: '#38bdf8' },
-                        { label: 'Objetivo', data: Array(7).fill(parseInt(db.objetivo)), type: 'line', borderColor: '#fbbf24', borderWidth: 3, pointRadius: 0 }
+                        { label: 'Obj', data: Array(7).fill(parseInt(db.objetivo)), type: 'line', borderColor: '#fbbf24', borderWidth: 3, pointRadius: 0, fill: false }
                     ] 
-                }
+                },
+                options: { scales: { y: { beginAtZero: true, grid: { color: '#334155' } } } }
             });
         }
 
@@ -117,7 +134,11 @@
 
         function importarDatos(event) {
             const reader = new FileReader();
-            reader.onload = (e) => { db = JSON.parse(e.target.result); localStorage.setItem('calAppDB', JSON.stringify(db)); location.reload(); };
+            reader.onload = (e) => { 
+                db = JSON.parse(e.target.result); 
+                localStorage.setItem('calAppDB', JSON.stringify(db)); 
+                location.reload(); 
+            };
             reader.readAsText(event.target.files[0]);
         }
 
@@ -131,11 +152,26 @@
             document.getElementById('gym').value = data.g;
             calcular();
         }
+    </script>
 
-        document.getElementById('objetivoDiario').value = db.objetivo;
-        document.getElementById('fechaSeleccionada').valueAsDate = new Date();
-        cargarDatos();
-        actualizarGrafica();
+
+
+
+
+
+<div class="btn-group">
+        <button class="action" onclick="exportarDatos()">Exportar</button>
+        <button class="action" onclick="document.getElementById('fileInput').click()">Importar</button>
+        <input type="file" id="fileInput" style="display:none" onchange="importarDatos(event)">
+    </div>
+
+    <!-- Pie de página añadido -->
+    <div style="text-align: center; font-size: 0.7rem; color: #64748b; margin-top: 30px; padding-bottom: 20px;">
+        CREADO POR DAVID LECHUGA
+    </div>
+
+    <script>
+        // ... (tu script sigue igual)
     </script>
 </body>
 </html>
